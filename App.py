@@ -30,28 +30,29 @@ UZIVATELE = {
     "test9@stavinvest.cz": "StavinvestPro",
     "test10@stavinvest.cz": "NuzkyNaPlech123"
 }
+
 if 'logged_in' not in st.session_state:
-   st.session_state.logged_in = False
-   st.session_state.current_user = ""
+    st.session_state.logged_in = False
+    st.session_state.current_user = ""
 
 if not st.session_state.logged_in:
-   st.markdown("<br><br>", unsafe_allow_html=True)
-   col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        st.markdown("<h2 style='text-align: center;'>🔒 Přihlášení do systému</h2>", unsafe_allow_html=True)
-        with st.form("login_form"):
-            email = st.text_input("E-mail")
-            password = st.text_input("Heslo", type="password")
-            submit = st.form_submit_button("Přihlásit se", use_container_width=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.markdown("<h2 style='text-align: center;'>🔒 Přihlášení do systému</h2>", unsafe_allow_html=True)
+        with st.form("login_form"):
+            email = st.text_input("E-mail")
+            password = st.text_input("Heslo", type="password")
+            submit = st.form_submit_button("Přihlásit se", use_container_width=True)
 
-            if submit:
-                if email in UZIVATELE and UZIVATELE[email] == password:
-                    st.session_state.logged_in = True
-                    st.session_state.current_user = email
-                    st.rerun()
-                else:
-                    st.error("Chybný e-mail nebo heslo!")
-    st.stop()
+            if submit:
+                if email in UZIVATELE and UZIVATELE[email] == password:
+                    st.session_state.logged_in = True
+                    st.session_state.current_user = email
+                    st.rerun()
+                else:
+                    st.error("Chybný e-mail nebo heslo!")
+    st.stop()
 
 # --- BOČNÍ PANEL (Odhlášení) ---
 st.sidebar.write(f"👤 Přihlášen(a): **{st.session_state.current_user}**")
