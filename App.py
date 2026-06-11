@@ -369,7 +369,9 @@ with tab_kalk:
                             st.error(f"CHYBA na řádku {row_id}: Prvek '{p['Prvek']}' s RŠ {rs_mm} mm je moc široký na materiál {v_mat}!")
                             continue
 
-                        cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Metrů"] * p["Kusů"]
+                        # --- UPRAVENÝ VÝPOČET OHYBŮ ---
+                        # Cena ohybu fixně na kus: (Ohyby * cena_za_jeden_ohyb) * počet_kusů
+                        cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Kusů"]
                         cena_priplatky += p.get("Atyp příplatek/ks (Kč)", 0.0) * p["Kusů"]
                         
                         for _ in range(int(p["Kusů"] * seg)):
