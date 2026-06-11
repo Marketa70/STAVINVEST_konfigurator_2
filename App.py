@@ -138,7 +138,7 @@ FILE_PRV = "prvky_db.csv"
 
 # --- INICIALIZACE NASTAVENÍ A DAT ---
 if 'config' not in st.session_state:
-    st.session_state.config = {"cena_ohyb": 12.0, "max_delka": 4000, "presah": 40}
+   st.session_state.config = {"cena_ohyb": 12.0, "max_delka": 4000, "presah": 40}
 
 # Načtení materiálů
 if 'materialy_df' not in st.session_state:
