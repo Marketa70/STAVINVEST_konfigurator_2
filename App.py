@@ -19,18 +19,17 @@ st.set_page_config(page_title="Konfigurátor Stavinvest", page_icon="✂️", la
 # ==========================================
 UZIVATELE = {
     "admin@stavinvest.cz": "HlavniKlempir!",
-    "test1@stavinvest.cz": "PlechovaStrecha1",
-    "test2@stavinvest.cz": "Okapnice2026",
-    "test3@stavinvest.cz": "TitanzinekRulez",
-    "test4@stavinvest.cz": "FalcujemeDobre",
-    "test5@stavinvest.cz": "OhybackaStroj",
-    "test6@stavinvest.cz": "SvitekPlechu99",
-    "test7@stavinvest.cz": "KlempiroveCZ",
-    "test8@stavinvest.cz": "ZavetrnaLista#",
-    "test9@stavinvest.cz": "StavinvestPro",
-    "test10@stavinvest.cz": "NuzkyNaPlech123"
+    "test1@stavinvest.cz": "PlechovaStrecha1",
+    "test2@stavinvest.cz": "Okapnice2026",
+    "test3@stavinvest.cz": "TitanzinekRulez",
+    "test4@stavinvest.cz": "FalcujemeDobre",
+    "test5@stavinvest.cz": "OhybackaStroj",
+    "test6@stavinvest.cz": "SvitekPlechu99",
+    "test7@stavinvest.cz": "KlempiroveCZ",
+    "test8@stavinvest.cz": "ZavetrnaLista#",
+    "test9@stavinvest.cz": "StavinvestPro",
+    "test10@stavinvest.cz": "NuzkyNaPlech123"
 }
-
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = ""
