@@ -346,31 +346,35 @@ with tab_kalk:
             updated_zakazka = edited_zakazka_df.drop(columns=['Řádek']).to_dict('records')
             st.session_state.zakazka = updated_zakazka
             
-            if st.button("🚀 SPOČÍTAT ZAKÁZKU", type="primary", use_container_width=True):
-                with st.spinner("🧠 Vytvářím výrobní moduly pro stroje a kreslím plány..."):
+           if st.button("🚀 SPOČÍTAT ZAKÁZKU", type="primary", use_container_width=True):
+                with st.spinner("🧠 Vytvářím výrobní moduly..."):
                     items = []
                     cena_prace = 0
                     cena_priplatky = 0
                     conf = st.session_state.config
                     m_data = mat_dict[v_mat]
                     
+                    # --- OPRAVENÝ VÝPOČET ---
+                    # 1. Spočítáme celkovou plochu všech prvků
+                    celkova_plocha_m2 = 0
+                    for p in st.session_state.zakazka:
+                        plocha_ks = (p["RŠ (mm)"] / 1000.0) * p["Metrů"]
+                        celkova_plocha_m2 += plocha_ks * p["Kusů"]
+                    
+                    # Uložíme do session state pro zobrazení
+                    st.session_state.celkova_plocha_m2 = celkova_plocha_m2
+                    
                     for idx, p in enumerate(st.session_state.zakazka):
                         row_id = idx + 1 
                         L_mm = p["Metrů"] * 1000
                         rs_mm = p["RŠ (mm)"]
-                        
                         seg = 1 if L_mm <= conf["max_delka"] else math.ceil((L_mm - conf["presah"]) / (conf["max_delka"] - conf["presah"]))
                         L_seg = (L_mm + (seg - 1) * conf["presah"]) / seg
                         
-                        # Natvrdo vždy jen podélné řezy
-                        vejde_se = (rs_mm <= m_data["Šířka (mm)"])
-                            
-                        if not vejde_se:
-                            st.error(f"CHYBA na řádku {row_id}: Prvek '{p['Prvek']}' s RŠ {rs_mm} mm je moc široký na materiál {v_mat}!")
+                        if not (rs_mm <= m_data["Šířka (mm)"]):
+                            st.error(f"CHYBA na řádku {row_id}: Prvek je moc široký!")
                             continue
 
-                        # --- UPRAVENÝ VÝPOČET OHYBŮ ---
-                        # Cena ohybu fixně na kus: (Ohyby * cena_za_jeden_ohyb) * počet_kusů
                         cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Kusů"]
                         cena_priplatky += p.get("Atyp příplatek/ks (Kč)", 0.0) * p["Kusů"]
                         
