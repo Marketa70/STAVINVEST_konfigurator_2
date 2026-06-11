@@ -68,105 +68,67 @@ st.title("✂️ Konfigurátor Stavinvest")
 st.info("💡 **Nová funkce:** Rozvinutou šíři (RŠ) nyní zadáváte ručně v milimetrech pro každý prvek zvlášť.")
 
 # ==========================================
-# MODULOVÝ PRUHOVÝ ALGORITMUS (VŽDY PODÉLNÉ ŘEZY)
+# MODULOVÝ PRUHOVÝ ALGORITMUS
 # ==========================================
 def pack_module_strips(items, coil_w, max_l, allow_rotation=False):
-    best_modules = None
-    best_len = float('inf')
-    
-    for iteration in range(200):
-        test_items = copy.deepcopy(items)
-        
-        if iteration == 0:
-            test_items.sort(key=lambda x: x['L'], reverse=True)
-        elif iteration == 1:
-            test_items.sort(key=lambda x: x['rš'], reverse=True)
-        else:
-            random.shuffle(test_items)
-            
-        for it in test_items:
-            can_std = (it['L'] <= max_l and it['rš'] <= coil_w)
-            can_rot = (allow_rotation and it['rš'] <= max_l and it['L'] <= coil_w)
-            
-            if iteration < 2:
-                if can_std: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
-                elif can_rot: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
-                else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False 
-            else:
-                if can_std and can_rot:
-                    if random.random() > 0.5: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
-                    else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
-                elif can_rot: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
-                else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
-
-        groups = defaultdict(list)
-        for it in test_items:
-            groups[it['dy']].append(it)
-            
-        strips = []
-        for dy, group_items in groups.items():
-            if iteration % 2 == 0:
-                group_items.sort(key=lambda x: x['dx'], reverse=True)
-            else:
-                random.shuffle(group_items)
-                
-            current_strips = []
-            for it in group_items:
-                placed = False
-                for s in current_strips:
-                    if s['l'] + it['dx'] <= max_l:
-                        it['x'] = s['l']
-                        s['items'].append(it)
-                        s['l'] += it['dx']
-                        placed = True
-                        break
-                if not placed:
-                    it['x'] = 0
-                    current_strips.append({'w': dy, 'l': it['dx'], 'items': [it]})
-            strips.extend(current_strips)
-            
-        strips.sort(key=lambda s: s['l'], reverse=True)
-        modules = []
-        
-        for s in strips:
-            placed = False
-            for m in modules:
-                if m['used_w'] + s['w'] <= coil_w:
-                    s['y'] = m['used_w']
-                    for it in s['items']:
-                        it['y'] = s['y']
-                    m['strips'].append(s)
-                    m['used_w'] += s['w']
-                    m['l'] = max(m['l'], s['l'])
-                    placed = True
-                    break
-            if not placed:
-                s['y'] = 0
-                for it in s['items']:
-                    it['y'] = 0
-                modules.append({'used_w': s['w'], 'l': s['l'], 'strips': [s]})
-                
-        tot_len = sum(m['l'] for m in modules)
-        if tot_len < best_len:
-            best_len = tot_len
-            best_modules = modules
-
-    formatted_bins = []
-    if best_modules:
-        for m in best_modules:
-            placed = []
-            for s in m['strips']:
-                for it in s['items']:
-                    it['draw_w'] = it['dx']
-                    it['draw_h'] = it['dy']
-                    placed.append(it)
-            formatted_bins.append({
-                'w_coil': coil_w,
-                'odvinuto_mm': m['l'],
-                'placed': placed
-            })
-            
-    return formatted_bins
+    best_modules = None
+    best_len = float('inf')
+    for iteration in range(200):
+        test_items = copy.deepcopy(items)
+        if iteration == 0: test_items.sort(key=lambda x: x['L'], reverse=True)
+        elif iteration == 1: test_items.sort(key=lambda x: x['rš'], reverse=True)
+        else: random.shuffle(test_items)
+        for it in test_items:
+            can_std = (it['L'] <= max_l and it['rš'] <= coil_w)
+            can_rot = (allow_rotation and it['rš'] <= max_l and it['L'] <= coil_w)
+            if iteration < 2:
+                if can_std: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
+                elif can_rot: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
+                else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False 
+            else:
+                if can_std and can_rot:
+                    if random.random() > 0.5: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
+                    else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
+                elif can_rot: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
+                else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
+        groups = defaultdict(list)
+        for it in test_items: groups[it['dy']].append(it)
+        strips = []
+        for dy, group_items in groups.items():
+            if iteration % 2 == 0: group_items.sort(key=lambda x: x['dx'], reverse=True)
+            else: random.shuffle(group_items)
+            current_strips = []
+            for it in group_items:
+                placed = False
+                for s in current_strips:
+                    if s['l'] + it['dx'] <= max_l:
+                        it['x'] = s['l']; s['items'].append(it); s['l'] += it['dx']; placed = True; break
+                if not placed:
+                    it['x'] = 0; current_strips.append({'w': dy, 'l': it['dx'], 'items': [it]})
+            strips.extend(current_strips)
+        strips.sort(key=lambda s: s['l'], reverse=True)
+        modules = []
+        for s in strips:
+            placed = False
+            for m in modules:
+                if m['used_w'] + s['w'] <= coil_w:
+                    s['y'] = m['used_w']
+                    for it in s['items']: it['y'] = s['y']
+                    m['strips'].append(s); m['used_w'] += s['w']; m['l'] = max(m['l'], s['l']); placed = True; break
+            if not placed:
+                s['y'] = 0
+                for it in s['items']: it['y'] = 0
+                modules.append({'used_w': s['w'], 'l': s['l'], 'strips': [s]})
+        tot_len = sum(m['l'] for m in modules)
+        if tot_len < best_len: best_len = tot_len; best_modules = modules
+    formatted_bins = []
+    if best_modules:
+        for m in best_modules:
+            placed = []
+            for s in m['strips']:
+                for it in s['items']: it['draw_w'] = it['dx']; it['draw_h'] = it['dy']; placed.append(it)
+            formatted_bins.append({'w_coil': coil_w, 'odvinuto_mm': m['l'], 'placed': placed})
+    return formatted_bins
 
 # ==========================================
 # SOUBORY PRO TRVALÉ ULOŽENÍ CENÍKŮ
