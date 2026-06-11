@@ -354,14 +354,12 @@ with tab_kalk:
                     conf = st.session_state.config
                     m_data = mat_dict[v_mat]
                     
-                    # --- OPRAVENÝ VÝPOČET ---
-                    # 1. Spočítáme celkovou plochu všech prvků
+                    # --- VÝPOČET CELKOVÉ PLOCHY ---
                     celkova_plocha_m2 = 0
                     for p in st.session_state.zakazka:
                         plocha_ks = (p["RŠ (mm)"] / 1000.0) * p["Metrů"]
                         celkova_plocha_m2 += plocha_ks * p["Kusů"]
                     
-                    # Uložíme do session state pro zobrazení
                     st.session_state.celkova_plocha_m2 = celkova_plocha_m2
                     
                     for idx, p in enumerate(st.session_state.zakazka):
