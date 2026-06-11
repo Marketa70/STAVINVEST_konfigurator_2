@@ -18,7 +18,7 @@ st.set_page_config(page_title="Konfigurátor Stavinvest", page_icon="✂️", la
 # 🔒 PŘIHLAŠOVACÍ ÚDAJE
 # ==========================================
 UZIVATELE = {
-    "admin@stavinvest.cz": "HlavniKlempir!",
+    "admin@stavinvest.cz": "HlavniKlempir!",
     "test1@stavinvest.cz": "PlechovaStrecha1",
     "test2@stavinvest.cz": "Okapnice2026",
     "test3@stavinvest.cz": "TitanzinekRulez",
