@@ -57,9 +57,9 @@ if not st.session_state.logged_in:
 # --- BOČNÍ PANEL (Odhlášení) ---
 st.sidebar.write(f"👤 Přihlášen(a): **{st.session_state.current_user}**")
 if st.sidebar.button("🚪 Odhlásit se", use_container_width=True):
-    st.session_state.logged_in = False
-    st.session_state.current_user = ""
-    st.rerun()
+    st.session_state.logged_in = False
+    st.session_state.current_user = ""
+    st.rerun()
 
 # ==========================================
 # HLAVNÍ APLIKACE
