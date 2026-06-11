@@ -168,7 +168,7 @@ def pack_module_strips(items, coil_w, max_l, allow_rotation=True):
 
 # --- INICIALIZACE NASTAVENÍ A DAT ---
 if 'config' not in st.session_state:
-    st.session_state.config = {"cena_ohyb": 10.0, "max_delka": 4000, "presah": 40, "povolit_rotaci": True}
+    st.session_state.config = {"cena_ohyb": 12.0, "max_delka": 4000, "presah": 40, "povolit_rotaci": True}
 
 if 'materialy_df' not in st.session_state:
     st.session_state.materialy_df = pd.DataFrame([
