@@ -5,6 +5,7 @@ import io
 import copy
 import random
 import os
+import json
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -169,14 +170,18 @@ def pack_module_strips(items, coil_w, max_l, allow_rotation=False):
     return formatted_bins
 
 # ==========================================
-# SOUBORY PRO TRVALÉ ULOŽENÍ CENÍKŮ
+# SOUBORY PRO TRVALÉ ULOŽENÍ
 # ==========================================
 FILE_MAT = "materialy_db.csv"
 FILE_PRV = "prvky_db.csv"
+FILE_CONF = "config_db.json"
 
 # --- INICIALIZACE NASTAVENÍ A DAT ---
 if 'config' not in st.session_state:
-    st.session_state.config = {"cena_ohyb": 10.0, "max_delka": 4000, "presah": 40}
+    st.session_state.config = {"cena_ohyb": 12.0, "max_delka": 4000, "presah": 40}
+    if os.path.exists(FILE_CONF):
+        with open(FILE_CONF, "r", encoding="utf-8") as f:
+            st.session_state.config.update(json.load(f))
 
 # Načtení materiálů
 if 'materialy_df' not in st.session_state:
@@ -237,32 +242,39 @@ def fmt_cz(value):
     return f"{integer_part},{parts[1]}"
 
 # --- ZÁLOŽKY ---
-tab_kalk, tab_nakres, tab_data, tab_nastaveni = st.tabs(["🧮 Kalkulátor", "📐 Nákres 2D Řezů", "⚙️ Data (Ceník)", "🔧 Nastavení"])
+tab_kalk, tab_nakres, tab_data = st.tabs(["🧮 Kalkulátor", "📐 Nákres 2D Řezů", "⚙️ Správa (Ceník a Nastavení)"])
 
 # ==========================================
 # ZÁLOŽKA: NASTAVENÍ A DATA
 # ==========================================
-with tab_nastaveni:
-    st.header("🔧 Nastavení výroby")
-    st.session_state.config["cena_ohyb"] = st.number_input("Cena za ohyb (Kč)", value=float(st.session_state.config["cena_ohyb"]))
-
 with tab_data:
-    st.header("⚙️ Správa dat (Ceník a materiály)")
+    st.header("⚙️ Správa dat (Ceník, materiály a nastavení)")
     
-    # Omezení práv pouze na administrátora pro tabulku dat
     if st.session_state.current_user == "admin@stavinvest.cz":
-        st.write("Jako administrátor můžete upravovat ceny a materiály.")
+        st.write("Jako administrátor můžete upravovat globální nastavení, ceny a materiály.")
+        
+        # Admin si může upravit a uložit cenu za ohyb
+        novy_ohyb = st.number_input("Cena za 1 ohyb (Kč)", value=float(st.session_state.config.get("cena_ohyb", 12.0)))
+        
         edited_mat = st.data_editor(st.session_state.materialy_df, num_rows="dynamic", key="em", use_container_width=True)
         edited_prv = st.data_editor(st.session_state.prvky_df, num_rows="dynamic", key="ep", use_container_width=True)
         
-        if st.button("💾 Uložit změny", type="primary"):
+        if st.button("💾 Uložit všechny změny trvale", type="primary"):
+            # Uložení CSV
             edited_mat.to_csv(FILE_MAT, index=False)
             edited_prv.to_csv(FILE_PRV, index=False)
+            
+            # Uložení konfigurace (json)
+            st.session_state.config["cena_ohyb"] = novy_ohyb
+            with open(FILE_CONF, "w", encoding="utf-8") as f:
+                json.dump(st.session_state.config, f)
+                
             st.session_state.materialy_df = edited_mat
             st.session_state.prvky_df = edited_prv
-            st.success("✅ Změny ceníku a prvků byly úspěšně uloženy a zůstanou zachovány i po odhlášení!")
+            st.success("✅ Veškeré nastavení, ceníky a prvky byly úspěšně uloženy!")
     else:
-        st.warning("Pohled pro čtení. Úpravy ceníku může provádět pouze administrátor.")
+        st.warning("Pohled pro čtení. Úpravy nastavení může provádět pouze administrátor.")
+        st.write(f"**Aktuální cena za ohyb:** {st.session_state.config.get('cena_ohyb', 12.0)} Kč")
         st.dataframe(st.session_state.materialy_df, use_container_width=True)
         st.dataframe(st.session_state.prvky_df, use_container_width=True)
 
@@ -368,7 +380,8 @@ with tab_kalk:
                             st.error(f"CHYBA na řádku {row_id}: Prvek '{p['Prvek']}' s RŠ {rs_mm} mm je moc široký na materiál {v_mat}!")
                             continue
 
-                        cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Metrů"] * p["Kusů"]
+                        # OPRAVENÝ VÝPOČET PRÁCE: Závisí na počtu fyzických segmentů, ne na metrech!
+                        cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * seg * p["Kusů"]
                         cena_priplatky += p.get("Atyp příplatek/ks (Kč)", 0.0) * p["Kusů"]
                         
                         for _ in range(int(p["Kusů"] * seg)):
@@ -385,7 +398,7 @@ with tab_kalk:
                         for b in bins:
                             odvinuto_m = b['odvinuto_mm'] / 1000
                             
-                            # VÝPOČET ČISTÉ (NETTO) PLOCHY JEN PRO NASKLÁDANÉ DÍLY
+                            # OPRAVENÝ VÝPOČET MATERIÁLU: Zákazník platí jen čistou plochu dílů
                             cista_plocha_modulu = sum((p['draw_w'] / 1000) * (p['draw_h'] / 1000) for p in b['placed'])
                             
                             tot_odvinuto += odvinuto_m
