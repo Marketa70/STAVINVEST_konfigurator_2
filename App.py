@@ -235,7 +235,7 @@ if 'reset_counter' not in st.session_state:
 mat_dict = {r["Materiál"]: r for _, r in st.session_state.materialy_df.iterrows()}
 prv_dict = {r["Typ prvku"]: r for _, r in st.session_state.prvky_df.iterrows()}
 
-# --- POMOCNÁ FUNKCE PRO FORMÁTOVÁNÍ ČÍSEL ---
+# --- VYLEPŠENÁ POMOCNÁ FUNKCE PRO FORMÁTOVÁNÍ ČÍSEL ---
 def fmt_cz(value):
     try:
         parts = f"{float(value):,.2f}".split('.')
@@ -472,7 +472,7 @@ with tab_kalk:
                 total_bez = c_mat + cena_prace + cena_priplatky
                 total_s = total_bez * 1.21
 
-                # Tabulka na hlavní stránce - nyní explicitně obsahuje celkový odvin
+                # Tabulka na hlavní stránce
                 md_table = f"""
 | Položka | Hodnota |
 | :--- | ---: |
@@ -501,6 +501,11 @@ with tab_kalk:
                     # Příprava položek s výpočty
                     df_out = pd.DataFrame(st.session_state.zakazka)
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
+                    
+                    # OPRAVA: Načtení chybějících proměnných pro výpočet v Excelu
+                    max_d = float(st.session_state.config.get("max_delka", 4000))
+                    presah = float(st.session_state.config.get("presah", 40))
+                    cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
                     
                     real_areas = []
                     for _, row in df_out.iterrows():
