@@ -380,8 +380,8 @@ with tab_kalk:
                             st.error(f"CHYBA na řádku {row_id}: Prvek '{p['Prvek']}' s RŠ {rs_mm} mm je moc široký na materiál {v_mat}!")
                             continue
 
-                        # OPRAVENÝ VÝPOČET PRÁCE: Závisí na počtu fyzických segmentů, ne na metrech!
-                        cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * seg * p["Kusů"]
+                        # VÝPOČET PRÁCE: Vráceno zpět na (počet ohybů * cena * metry * kusy) dle nového zadání
+                        cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Metrů"] * p["Kusů"]
                         cena_priplatky += p.get("Atyp příplatek/ks (Kč)", 0.0) * p["Kusů"]
                         
                         for _ in range(int(p["Kusů"] * seg)):
@@ -398,7 +398,6 @@ with tab_kalk:
                         for b in bins:
                             odvinuto_m = b['odvinuto_mm'] / 1000
                             
-                            # OPRAVENÝ VÝPOČET MATERIÁLU: Zákazník platí jen čistou plochu dílů
                             cista_plocha_modulu = sum((p['draw_w'] / 1000) * (p['draw_h'] / 1000) for p in b['placed'])
                             
                             tot_odvinuto += odvinuto_m
@@ -463,8 +462,10 @@ with tab_kalk:
 """
                 st.markdown(md_table, unsafe_allow_html=True)
 
+                # EXCEL EXPORT
                 buf = io.BytesIO()
                 with pd.ExcelWriter(buf, engine='openpyxl') as wr:
+                    # Tabulka 1: Zadání
                     info_df = pd.DataFrame([
                         {"Parametr": "Odběratel / Zakázka", "Hodnota": st.session_state.odberatel},
                         {"Parametr": "Materiál", "Hodnota": st.session_state.v_mat}
@@ -475,10 +476,21 @@ with tab_kalk:
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
                     df_out.to_excel(wr, sheet_name='Zadání', index=False, startrow=4)
                     
-                    pd.DataFrame.from_dict(st.session_state.sumar, orient='index').to_excel(wr, sheet_name='Souhrn_Materiálu')
+                    # Tabulka 2: Souhrn_Materiálu
+                    pd.DataFrame.from_dict(st.session_state.sumar, orient='index', columns=['Hodnota']).to_excel(wr, sheet_name='Souhrn_Materiálu')
+                    
+                    # NOVÉ: Tabulka 3: Kalkulace Cen
+                    fin_data = [
+                        {"Položka": "Materiál - Čistá plocha (bez DPH)", "Částka (Kč)": round(c_mat, 2)},
+                        {"Položka": "Práce / Ohyby (bez DPH)", "Částka (Kč)": round(cena_prace, 2)},
+                        {"Položka": "Atypické příplatky (bez DPH)", "Částka (Kč)": round(cena_priplatky, 2)},
+                        {"Položka": "CELKEM (bez DPH)", "Částka (Kč)": round(total_bez, 2)},
+                        {"Položka": "CELKEM (s DPH 21 %)", "Částka (Kč)": round(total_s, 2)}
+                    ]
+                    pd.DataFrame(fin_data).to_excel(wr, sheet_name='Kalkulace_Cen', index=False)
                     
                     wb = wr.book
-                    for sheet_name in ['Zadání', 'Souhrn_Materiálu']:
+                    for sheet_name in ['Zadání', 'Souhrn_Materiálu', 'Kalkulace_Cen']:
                         ws = wr.sheets[sheet_name]
                         for col in ws.columns:
                             max_length = 0
@@ -492,6 +504,7 @@ with tab_kalk:
                             adjusted_width = (max_length + 2)
                             ws.column_dimensions[column_letter].width = adjusted_width
                     
+                    # Nákresy
                     if st.session_state.get('generated_figs'):
                         ws_img = wb.create_sheet('Výrobní nákresy')
                         ws_img.column_dimensions['A'].width = 50 
