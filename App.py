@@ -235,11 +235,14 @@ if 'reset_counter' not in st.session_state:
 mat_dict = {r["Materiál"]: r for _, r in st.session_state.materialy_df.iterrows()}
 prv_dict = {r["Typ prvku"]: r for _, r in st.session_state.prvky_df.iterrows()}
 
-# --- POMOCNÁ FUNKCE PRO FORMÁTOVÁNÍ ČÍSEL ---
+# --- VYLEPŠENÁ POMOCNÁ FUNKCE PRO FORMÁTOVÁNÍ ČÍSEL ---
 def fmt_cz(value):
-    parts = f"{value:,.2f}".split('.')
-    integer_part = parts[0].replace(',', ' ')
-    return f"{integer_part},{parts[1]}"
+    try:
+        parts = f"{float(value):,.2f}".split('.')
+        integer_part = parts[0].replace(',', ' ')
+        return f"{integer_part},{parts[1]}"
+    except (ValueError, TypeError):
+        return value
 
 # --- ZÁLOŽKY ---
 tab_kalk, tab_nakres, tab_data = st.tabs(["🧮 Kalkulátor", "📐 Nákres 2D Řezů", "⚙️ Správa (Ceník a Nastavení)"])
@@ -274,7 +277,7 @@ with tab_data:
             st.success("✅ Veškeré nastavení, ceníky a prvky byly úspěšně uloženy!")
     else:
         st.warning("Pohled pro čtení. Úpravy nastavení může provádět pouze administrátor.")
-        st.write(f"**Aktuální cena za ohyb:** {st.session_state.config.get('cena_ohyb', 12.0)} Kč")
+        st.write(f"**Aktuální cena za ohyb:** {fmt_cz(st.session_state.config.get('cena_ohyb', 12.0))} Kč")
         st.dataframe(st.session_state.materialy_df, use_container_width=True)
         st.dataframe(st.session_state.prvky_df, use_container_width=True)
 
@@ -408,10 +411,11 @@ with tab_kalk:
                             "Počet Modulů (ks)": len(bins), 
                             "Celkem odvinout (m)": tot_odvinuto, 
                             "Čistá plocha dílů (m2)": tot_plocha, 
-                            "Cena materiálu (bez DPH):": tot_cena_mat
+                            "Cena materiálu (bez DPH)": tot_cena_mat
                         }
                         
                         st.session_state.sumar = sumar
+                        st.session_state.tot_plocha = tot_plocha
                         st.session_state.cena_prace = cena_prace
                         st.session_state.cena_priplatky = cena_priplatky
                         st.session_state.c_mat = tot_cena_mat
@@ -445,54 +449,76 @@ with tab_kalk:
                 st.divider()
                 st.subheader("🧾 Souhrnná kalkulace")
                 
+                tot_plocha = float(st.session_state.tot_plocha)
                 c_mat = float(st.session_state.c_mat)
                 cena_prace = float(st.session_state.cena_prace)
                 cena_priplatky = float(st.session_state.get('cena_priplatky', 0))
                 total_bez = c_mat + cena_prace + cena_priplatky
                 total_s = total_bez * 1.21
 
+                # Vylepšená tabulka v uživatelském rozhraní
                 md_table = f"""
-| Položka | Částka (Kč) |
+| Položka | Hodnota |
 | :--- | ---: |
-| Materiál - Čistá plocha (bez DPH): | {fmt_cz(c_mat)} |
-| Práce / Ohyby (bez DPH): | {fmt_cz(cena_prace)} |
-| Atypické příplatky (bez DPH): | {fmt_cz(cena_priplatky)} |
-| <span style="font-size: 1.1em; color: #333;">**CELKEM (bez DPH):**</span> | <span style="font-size: 1.1em; color: #333;">**{fmt_cz(total_bez)}**</span> |
-| <span style="font-size: 1.3em; color: #D32F2F;">**CELKEM (s DPH 21 %):**</span> | <span style="font-size: 1.3em; color: #D32F2F;">**{fmt_cz(total_s)}**</span> |
+| Celková čistá plocha dílů: | **{fmt_cz(tot_plocha)} m²** |
+| Materiál - Čistá plocha (bez DPH): | {fmt_cz(c_mat)} Kč |
+| Práce / Ohyby (bez DPH): | {fmt_cz(cena_prace)} Kč |
+| Atypické příplatky (bez DPH): | {fmt_cz(cena_priplatky)} Kč |
+| <span style="font-size: 1.1em; color: #333;">**CELKEM (bez DPH):**</span> | <span style="font-size: 1.1em; color: #333;">**{fmt_cz(total_bez)} Kč**</span> |
+| <span style="font-size: 1.3em; color: #D32F2F;">**CELKEM (s DPH 21 %):**</span> | <span style="font-size: 1.3em; color: #D32F2F;">**{fmt_cz(total_s)} Kč**</span> |
 """
                 st.markdown(md_table, unsafe_allow_html=True)
 
-                # EXCEL EXPORT
+                # --- EXCEL EXPORT ---
                 buf = io.BytesIO()
                 with pd.ExcelWriter(buf, engine='openpyxl') as wr:
-                    # Tabulka 1: Zadání
+                    # Tabulka 1: Základní info
                     info_df = pd.DataFrame([
                         {"Parametr": "Odběratel / Zakázka", "Hodnota": st.session_state.odberatel},
                         {"Parametr": "Materiál", "Hodnota": st.session_state.v_mat}
                     ])
                     info_df.to_excel(wr, sheet_name='Zadání', index=False, startrow=0)
                     
+                    # Příprava položek s výpočty
                     df_out = pd.DataFrame(st.session_state.zakazka)
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
+                    
+                    # Nové sloupce (Plocha a Cena za ohyby pro každý řádek)
+                    cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
+                    df_out['Plocha (m2)'] = (df_out['RŠ (mm)'] / 1000) * df_out['Metrů'] * df_out['Kusů']
+                    df_out['Cena za ohyby (Kč)'] = df_out['Ohyby'] * cena_ohyb_val * df_out['Metrů'] * df_out['Kusů']
+                    
+                    # Řádek "CELKEM" pod tabulkou položek
+                    total_row = {col: "" for col in df_out.columns}
+                    total_row['Řádek'] = "CELKEM"
+                    total_row['Plocha (m2)'] = df_out['Plocha (m2)'].sum()
+                    total_row['Cena za ohyby (Kč)'] = df_out['Cena za ohyby (Kč)'].sum()
+                    
+                    # Přidání součtového řádku do dataframe
+                    df_out = pd.concat([df_out, pd.DataFrame([total_row])], ignore_index=True)
+                    
+                    # Zápis tabulky položek na list "Zadání"
                     df_out.to_excel(wr, sheet_name='Zadání', index=False, startrow=4)
                     
-                    # Výpočet pozice pro Kalkulaci cen na stejném listu (Zadání)
-                    # Začínáme pod tabulkou položek, vynecháme 2 řádky pro přehlednost
+                    # Výpočet startovní pozice pro finální kalkulaci
                     kalkulace_startrow = 4 + len(df_out) + 3 
                     
+                    # Finální kalkulace cen
                     fin_data = [
-                        {"Položka": "Materiál - Čistá plocha (bez DPH)", "Částka (Kč)": round(c_mat, 2)},
-                        {"Položka": "Práce / Ohyby (bez DPH)", "Částka (Kč)": round(cena_prace, 2)},
-                        {"Položka": "Atypické příplatky (bez DPH)", "Částka (Kč)": round(cena_priplatky, 2)},
-                        {"Položka": "CELKEM (bez DPH)", "Částka (Kč)": round(total_bez, 2)},
-                        {"Položka": "CELKEM (s DPH 21 %)", "Částka (Kč)": round(total_s, 2)}
+                        {"Položka": "Materiál - Čistá plocha (bez DPH)", "Částka (Kč)": c_mat},
+                        {"Položka": "Práce / Ohyby (bez DPH)", "Částka (Kč)": cena_prace},
+                        {"Položka": "Atypické příplatky (bez DPH)", "Částka (Kč)": cena_priplatky},
+                        {"Položka": "CELKEM (bez DPH)", "Částka (Kč)": total_bez},
+                        {"Položka": "CELKEM (s DPH 21 %)", "Částka (Kč)": total_s}
                     ]
-                    # Zápis kalkulace pod položky na list Zadání
+                    
+                    # Zápis finální kalkulace pod položky
                     pd.DataFrame(fin_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=kalkulace_startrow)
 
-                    # Tabulka 2: Souhrn_Materiálu zůstává na svém technickém listu
+                    # Souhrn materiálu na další list
                     pd.DataFrame.from_dict(st.session_state.sumar, orient='index', columns=['Hodnota']).to_excel(wr, sheet_name='Souhrn_Materiálu')
                     
+                    # Aplikace formátování čísel pro Excel (zajistí mezeru u tisíců a 2 desetinná místa)
                     wb = wr.book
                     for sheet_name in ['Zadání', 'Souhrn_Materiálu']:
                         ws = wr.sheets[sheet_name]
@@ -500,14 +526,20 @@ with tab_kalk:
                             max_length = 0
                             column_letter = col[0].column_letter
                             for cell in col:
+                                # Pokud je hodnota desetinné číslo (float), Excel ho správně naformátuje
+                                if isinstance(cell.value, float):
+                                    cell.number_format = '#,##0.00'
+                                
                                 try:
                                     if cell.value:
                                         max_length = max(max_length, len(str(cell.value)))
                                 except:
                                     pass
+                            # Šířka sloupce
                             adjusted_width = (max_length + 2)
                             ws.column_dimensions[column_letter].width = adjusted_width
                     
+                    # Nákresy
                     if st.session_state.get('generated_figs'):
                         ws_img = wb.create_sheet('Výrobní nákresy')
                         ws_img.column_dimensions['A'].width = 50 
