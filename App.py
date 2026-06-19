@@ -458,7 +458,7 @@ with tab_kalk:
                 total_bez = c_mat + cena_prace + cena_priplatky
                 total_s = total_bez * 1.21
 
-                # Zjednodušená tabulka na hlavní stránce
+                # Zjednodušená tabulka na hlavní stránce (odstraněna plocha dílů a metry odvinu)
                 md_table = f"""
 | Položka | Hodnota |
 | :--- | ---: |
@@ -488,12 +488,13 @@ with tab_kalk:
                     
                     cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
                     
-                    # Odstraněn výpočet sloupce 'Plocha vč. přesahů (m2)'
+                    # Sloupec pro výpočet práce
                     df_out['Cena za ohyby (Kč)'] = df_out['Ohyby'] * cena_ohyb_val * df_out['Metrů'] * df_out['Kusů']
                     
                     # Řádek "CELKEM" pod tabulkou položek
                     total_row = {col: "" for col in df_out.columns}
                     total_row['Řádek'] = "CELKEM"
+                    total_row['Atyp příplatek/ks (Kč)'] = cena_priplatky
                     total_row['Cena za ohyby (Kč)'] = df_out['Cena za ohyby (Kč)'].sum()
                     
                     df_out = pd.concat([df_out, pd.DataFrame([total_row])], ignore_index=True)
