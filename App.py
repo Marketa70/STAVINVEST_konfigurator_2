@@ -415,7 +415,6 @@ with tab_kalk:
                         
                         for b in bins:
                             odvinuto_m = b['odvinuto_mm'] / 1000
-                            # VÝPOČET MATERIÁLU: Celkový odvin stroje x Šířka role
                             hruba_plocha_modulu = odvinuto_m * (w_coil / 1000)
                             
                             tot_odvinuto += odvinuto_m
@@ -463,8 +462,6 @@ with tab_kalk:
                 st.divider()
                 st.subheader("🧾 Souhrnná kalkulace")
                 
-                sum_items_area = float(st.session_state.sum_items_area)
-                tot_odvinuto = float(st.session_state.tot_odvinuto)
                 tot_hruba_plocha = float(st.session_state.tot_hruba_plocha)
                 c_mat = float(st.session_state.c_mat)
                 cena_prace = float(st.session_state.cena_prace)
@@ -476,8 +473,6 @@ with tab_kalk:
                 md_table = f"""
 | Položka | Hodnota |
 | :--- | ---: |
-| Součet plochy čistých dílů (vč. přesahů): | {fmt_cz(sum_items_area)} m² |
-| **Celkem odvinout z role:** | **{fmt_cz(tot_odvinuto)} m** |
 | Fakturovaná plocha (odvin × šířka svitku): | {fmt_cz(tot_hruba_plocha)} m² |
 | **Materiál (výpočet z odvinu - bez DPH):** | **{fmt_cz(c_mat)} Kč** |
 | Práce / Ohyby (bez DPH): | {fmt_cz(cena_prace)} Kč |
@@ -502,7 +497,6 @@ with tab_kalk:
                     df_out = pd.DataFrame(st.session_state.zakazka)
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
                     
-                    # OPRAVA: Načtení chybějících proměnných pro výpočet v Excelu
                     max_d = float(st.session_state.config.get("max_delka", 4000))
                     presah = float(st.session_state.config.get("presah", 40))
                     cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
@@ -530,7 +524,7 @@ with tab_kalk:
                     # Finální kalkulace cen přímo na listu "Zadání"
                     kalkulace_startrow = 5 + len(df_out) + 2 
                     fin_data = [
-                        {"Finální kalkulace": "Celkem odvinout z role (m)", "Hodnota / Částka": tot_odvinuto},
+                        {"Finální kalkulace": "Celkem odvinout z role (m)", "Hodnota / Částka": float(st.session_state.tot_odvinuto)},
                         {"Finální kalkulace": "Fakturovaná plocha z odvinu (m2)", "Hodnota / Částka": tot_hruba_plocha},
                         {"Finální kalkulace": "Materiál (výpočet z odvinu - bez DPH)", "Hodnota / Částka": c_mat},
                         {"Finální kalkulace": "Práce / Ohyby (bez DPH)", "Hodnota / Částka": cena_prace},
