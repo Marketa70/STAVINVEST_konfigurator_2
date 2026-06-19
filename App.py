@@ -235,7 +235,7 @@ if 'reset_counter' not in st.session_state:
 mat_dict = {r["Materiál"]: r for _, r in st.session_state.materialy_df.iterrows()}
 prv_dict = {r["Typ prvku"]: r for _, r in st.session_state.prvky_df.iterrows()}
 
-# --- VYLEPŠENÁ POMOCNÁ FUNKCE PRO FORMÁTOVÁNÍ ČÍSEL ---
+# --- POMOCNÁ FUNKCE PRO FORMÁTOVÁNÍ ČÍSEL ---
 def fmt_cz(value):
     try:
         parts = f"{float(value):,.2f}".split('.')
@@ -363,6 +363,18 @@ with tab_kalk:
             
             if st.button("🚀 SPOČÍTAT ZAKÁZKU", type="primary", use_container_width=True):
                 with st.spinner("🧠 Vytvářím výrobní moduly pro stroje a kreslím plány..."):
+                    
+                    # Výpočet čisté plochy dílů s přesahy
+                    sum_items_area = 0
+                    max_d = float(st.session_state.config.get("max_delka", 4000))
+                    presah = float(st.session_state.config.get("presah", 40))
+                    for p in st.session_state.zakazka:
+                        L_mm = p['Metrů'] * 1000
+                        seg = 1 if L_mm <= max_d else math.ceil((L_mm - presah) / (max_d - presah))
+                        real_L_mm = L_mm + (seg - 1) * presah
+                        sum_items_area += (real_L_mm / 1000) * (p['RŠ (mm)'] / 1000) * p['Kusů']
+                    st.session_state.sum_items_area = sum_items_area
+
                     items = []
                     cena_prace = 0
                     cena_priplatky = 0
@@ -383,7 +395,7 @@ with tab_kalk:
                             st.error(f"CHYBA na řádku {row_id}: Prvek '{p['Prvek']}' s RŠ {rs_mm} mm je moc široký na materiál {v_mat}!")
                             continue
 
-                        # VÝPOČET PRÁCE: Vráceno zpět na (počet ohybů * cena * metry * kusy)
+                        # VÝPOČET PRÁCE: (počet ohybů * cena * metry * kusy)
                         cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Metrů"] * p["Kusů"]
                         cena_priplatky += p.get("Atyp příplatek/ks (Kč)", 0.0) * p["Kusů"]
                         
@@ -397,15 +409,18 @@ with tab_kalk:
                         
                         bins = pack_module_strips(items, w_coil, max_tab_len, allow_rotation=False)
                         
-                        tot_odvinuto = 0; tot_plocha = 0; tot_cena_mat = 0
+                        tot_odvinuto = 0
+                        tot_hruba_plocha = 0
+                        tot_cena_mat = 0
+                        
                         for b in bins:
                             odvinuto_m = b['odvinuto_mm'] / 1000
-                            
-                            cista_plocha_modulu = sum((p['draw_w'] / 1000) * (p['draw_h'] / 1000) for p in b['placed'])
+                            # VÝPOČET MATERIÁLU: Celkový odvin stroje x Šířka role
+                            hruba_plocha_modulu = odvinuto_m * (w_coil / 1000)
                             
                             tot_odvinuto += odvinuto_m
-                            tot_plocha += cista_plocha_modulu
-                            tot_cena_mat += cista_plocha_modulu * cena_m2
+                            tot_hruba_plocha += hruba_plocha_modulu
+                            tot_cena_mat += hruba_plocha_modulu * cena_m2
                             
                         sumar = {
                             "Počet Modulů (ks)": len(bins), 
@@ -413,7 +428,8 @@ with tab_kalk:
                         }
                         
                         st.session_state.sumar = sumar
-                        st.session_state.tot_plocha = tot_plocha
+                        st.session_state.tot_odvinuto = tot_odvinuto
+                        st.session_state.tot_hruba_plocha = tot_hruba_plocha
                         st.session_state.cena_prace = cena_prace
                         st.session_state.cena_priplatky = cena_priplatky
                         st.session_state.c_mat = tot_cena_mat
@@ -447,19 +463,23 @@ with tab_kalk:
                 st.divider()
                 st.subheader("🧾 Souhrnná kalkulace")
                 
-                tot_plocha = float(st.session_state.tot_plocha)
+                sum_items_area = float(st.session_state.sum_items_area)
+                tot_odvinuto = float(st.session_state.tot_odvinuto)
+                tot_hruba_plocha = float(st.session_state.tot_hruba_plocha)
                 c_mat = float(st.session_state.c_mat)
                 cena_prace = float(st.session_state.cena_prace)
                 cena_priplatky = float(st.session_state.get('cena_priplatky', 0))
                 total_bez = c_mat + cena_prace + cena_priplatky
                 total_s = total_bez * 1.21
 
-                # Vylepšená tabulka v uživatelském rozhraní
+                # Tabulka na hlavní stránce - nyní explicitně obsahuje celkový odvin
                 md_table = f"""
 | Položka | Hodnota |
 | :--- | ---: |
-| Celková plocha (vč. přesahů u dělených kusů): | **{fmt_cz(tot_plocha)} m²** |
-| Materiál - Čistá plocha (bez DPH): | {fmt_cz(c_mat)} Kč |
+| Součet plochy čistých dílů (vč. přesahů): | {fmt_cz(sum_items_area)} m² |
+| **Celkem odvinout z role:** | **{fmt_cz(tot_odvinuto)} m** |
+| Fakturovaná plocha (odvin × šířka svitku): | {fmt_cz(tot_hruba_plocha)} m² |
+| **Materiál (výpočet z odvinu - bez DPH):** | **{fmt_cz(c_mat)} Kč** |
 | Práce / Ohyby (bez DPH): | {fmt_cz(cena_prace)} Kč |
 | Atypické příplatky (bez DPH): | {fmt_cz(cena_priplatky)} Kč |
 | <span style="font-size: 1.1em; color: #333;">**CELKEM (bez DPH):**</span> | <span style="font-size: 1.1em; color: #333;">**{fmt_cz(total_bez)} Kč**</span> |
@@ -482,17 +502,10 @@ with tab_kalk:
                     df_out = pd.DataFrame(st.session_state.zakazka)
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
                     
-                    # Výpočet skutečné plochy včetně přesahů pro rozdělené kusy
-                    max_d = float(st.session_state.config.get("max_delka", 4000))
-                    presah = float(st.session_state.config.get("presah", 40))
-                    cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
-                    
                     real_areas = []
                     for _, row in df_out.iterrows():
                         L_mm = row['Metrů'] * 1000
-                        # Počet segmentů, na které se musí díl rozdělit
                         seg = 1 if L_mm <= max_d else math.ceil((L_mm - presah) / (max_d - presah))
-                        # Zvýšení celkové délky o přesahy (pouze pokud seg > 1)
                         real_L_mm = L_mm + (seg - 1) * presah
                         plocha = (real_L_mm / 1000) * (row['RŠ (mm)'] / 1000) * row['Kusů']
                         real_areas.append(plocha)
@@ -507,26 +520,25 @@ with tab_kalk:
                     total_row['Cena za ohyby (Kč)'] = df_out['Cena za ohyby (Kč)'].sum()
                     
                     df_out = pd.concat([df_out, pd.DataFrame([total_row])], ignore_index=True)
-                    
-                    # Zápis tabulky položek na list "Zadání"
                     df_out.to_excel(wr, sheet_name='Zadání', index=False, startrow=5)
                     
-                    # Finální kalkulace cen
+                    # Finální kalkulace cen přímo na listu "Zadání"
                     kalkulace_startrow = 5 + len(df_out) + 2 
                     fin_data = [
-                        {"Finální kalkulace": "Materiál - Čistá plocha (bez DPH)", "Částka (Kč)": c_mat},
-                        {"Finální kalkulace": "Práce / Ohyby (bez DPH)", "Částka (Kč)": cena_prace},
-                        {"Finální kalkulace": "Atypické příplatky (bez DPH)", "Částka (Kč)": cena_priplatky},
-                        {"Finální kalkulace": "CELKEM (bez DPH)", "Částka (Kč)": total_bez},
-                        {"Finální kalkulace": "CELKEM (s DPH 21 %)", "Částka (Kč)": total_s}
+                        {"Finální kalkulace": "Celkem odvinout z role (m)", "Hodnota / Částka": tot_odvinuto},
+                        {"Finální kalkulace": "Fakturovaná plocha z odvinu (m2)", "Hodnota / Částka": tot_hruba_plocha},
+                        {"Finální kalkulace": "Materiál (výpočet z odvinu - bez DPH)", "Hodnota / Částka": c_mat},
+                        {"Finální kalkulace": "Práce / Ohyby (bez DPH)", "Hodnota / Částka": cena_prace},
+                        {"Finální kalkulace": "Atypické příplatky (bez DPH)", "Hodnota / Částka": cena_priplatky},
+                        {"Finální kalkulace": "CELKEM (bez DPH)", "Hodnota / Částka": total_bez},
+                        {"Finální kalkulace": "CELKEM (s DPH 21 %)", "Hodnota / Částka": total_s}
                     ]
                     pd.DataFrame(fin_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=kalkulace_startrow)
 
-                    # Výrobní souhrn (odvinuto, moduly) - ihned pod cenami
+                    # Výrobní souhrn (moduly) - hned pod kalkulací
                     prod_startrow = kalkulace_startrow + len(fin_data) + 2
                     prod_data = [
-                        {"Výrobní parametry": "Počet Modulů (ks)", "Hodnota": st.session_state.sumar["Počet Modulů (ks)"]},
-                        {"Výrobní parametry": "Celkem odvinout (m)", "Hodnota": st.session_state.sumar["Celkem odvinout (m)"]}
+                        {"Výrobní parametry": "Počet Výrobních Modulů (ks)", "Hodnota": st.session_state.sumar["Počet Modulů (ks)"]}
                     ]
                     pd.DataFrame(prod_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=prod_startrow)
                     
