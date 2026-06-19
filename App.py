@@ -380,7 +380,7 @@ with tab_kalk:
                             st.error(f"CHYBA na řádku {row_id}: Prvek '{p['Prvek']}' s RŠ {rs_mm} mm je moc široký na materiál {v_mat}!")
                             continue
 
-                        # VÝPOČET PRÁCE: Vráceno zpět na (počet ohybů * cena * metry * kusy) dle nového zadání
+                        # VÝPOČET PRÁCE: Vráceno zpět na (počet ohybů * cena * metry * kusy)
                         cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Metrů"] * p["Kusů"]
                         cena_priplatky += p.get("Atyp příplatek/ks (Kč)", 0.0) * p["Kusů"]
                         
@@ -476,10 +476,10 @@ with tab_kalk:
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
                     df_out.to_excel(wr, sheet_name='Zadání', index=False, startrow=4)
                     
-                    # Tabulka 2: Souhrn_Materiálu
-                    pd.DataFrame.from_dict(st.session_state.sumar, orient='index', columns=['Hodnota']).to_excel(wr, sheet_name='Souhrn_Materiálu')
+                    # Výpočet pozice pro Kalkulaci cen na stejném listu (Zadání)
+                    # Začínáme pod tabulkou položek, vynecháme 2 řádky pro přehlednost
+                    kalkulace_startrow = 4 + len(df_out) + 3 
                     
-                    # NOVÉ: Tabulka 3: Kalkulace Cen
                     fin_data = [
                         {"Položka": "Materiál - Čistá plocha (bez DPH)", "Částka (Kč)": round(c_mat, 2)},
                         {"Položka": "Práce / Ohyby (bez DPH)", "Částka (Kč)": round(cena_prace, 2)},
@@ -487,10 +487,14 @@ with tab_kalk:
                         {"Položka": "CELKEM (bez DPH)", "Částka (Kč)": round(total_bez, 2)},
                         {"Položka": "CELKEM (s DPH 21 %)", "Částka (Kč)": round(total_s, 2)}
                     ]
-                    pd.DataFrame(fin_data).to_excel(wr, sheet_name='Kalkulace_Cen', index=False)
+                    # Zápis kalkulace pod položky na list Zadání
+                    pd.DataFrame(fin_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=kalkulace_startrow)
+
+                    # Tabulka 2: Souhrn_Materiálu zůstává na svém technickém listu
+                    pd.DataFrame.from_dict(st.session_state.sumar, orient='index', columns=['Hodnota']).to_excel(wr, sheet_name='Souhrn_Materiálu')
                     
                     wb = wr.book
-                    for sheet_name in ['Zadání', 'Souhrn_Materiálu', 'Kalkulace_Cen']:
+                    for sheet_name in ['Zadání', 'Souhrn_Materiálu']:
                         ws = wr.sheets[sheet_name]
                         for col in ws.columns:
                             max_length = 0
@@ -504,7 +508,6 @@ with tab_kalk:
                             adjusted_width = (max_length + 2)
                             ws.column_dimensions[column_letter].width = adjusted_width
                     
-                    # Nákresy
                     if st.session_state.get('generated_figs'):
                         ws_img = wb.create_sheet('Výrobní nákresy')
                         ws_img.column_dimensions['A'].width = 50 
