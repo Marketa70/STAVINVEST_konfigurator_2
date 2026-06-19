@@ -364,17 +364,6 @@ with tab_kalk:
             if st.button("🚀 SPOČÍTAT ZAKÁZKU", type="primary", use_container_width=True):
                 with st.spinner("🧠 Vytvářím výrobní moduly pro stroje a kreslím plány..."):
                     
-                    # Výpočet čisté plochy dílů s přesahy
-                    sum_items_area = 0
-                    max_d = float(st.session_state.config.get("max_delka", 4000))
-                    presah = float(st.session_state.config.get("presah", 40))
-                    for p in st.session_state.zakazka:
-                        L_mm = p['Metrů'] * 1000
-                        seg = 1 if L_mm <= max_d else math.ceil((L_mm - presah) / (max_d - presah))
-                        real_L_mm = L_mm + (seg - 1) * presah
-                        sum_items_area += (real_L_mm / 1000) * (p['RŠ (mm)'] / 1000) * p['Kusů']
-                    st.session_state.sum_items_area = sum_items_area
-
                     items = []
                     cena_prace = 0
                     cena_priplatky = 0
@@ -469,7 +458,7 @@ with tab_kalk:
                 total_bez = c_mat + cena_prace + cena_priplatky
                 total_s = total_bez * 1.21
 
-                # Tabulka na hlavní stránce
+                # Zjednodušená tabulka na hlavní stránce
                 md_table = f"""
 | Položka | Hodnota |
 | :--- | ---: |
@@ -497,25 +486,14 @@ with tab_kalk:
                     df_out = pd.DataFrame(st.session_state.zakazka)
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
                     
-                    max_d = float(st.session_state.config.get("max_delka", 4000))
-                    presah = float(st.session_state.config.get("presah", 40))
                     cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
                     
-                    real_areas = []
-                    for _, row in df_out.iterrows():
-                        L_mm = row['Metrů'] * 1000
-                        seg = 1 if L_mm <= max_d else math.ceil((L_mm - presah) / (max_d - presah))
-                        real_L_mm = L_mm + (seg - 1) * presah
-                        plocha = (real_L_mm / 1000) * (row['RŠ (mm)'] / 1000) * row['Kusů']
-                        real_areas.append(plocha)
-                        
-                    df_out['Plocha vč. přesahů (m2)'] = real_areas
+                    # Odstraněn výpočet sloupce 'Plocha vč. přesahů (m2)'
                     df_out['Cena za ohyby (Kč)'] = df_out['Ohyby'] * cena_ohyb_val * df_out['Metrů'] * df_out['Kusů']
                     
                     # Řádek "CELKEM" pod tabulkou položek
                     total_row = {col: "" for col in df_out.columns}
                     total_row['Řádek'] = "CELKEM"
-                    total_row['Plocha vč. přesahů (m2)'] = df_out['Plocha vč. přesahů (m2)'].sum()
                     total_row['Cena za ohyby (Kč)'] = df_out['Cena za ohyby (Kč)'].sum()
                     
                     df_out = pd.concat([df_out, pd.DataFrame([total_row])], ignore_index=True)
