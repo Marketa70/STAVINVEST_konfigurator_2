@@ -409,9 +409,7 @@ with tab_kalk:
                             
                         sumar = {
                             "Počet Modulů (ks)": len(bins), 
-                            "Celkem odvinout (m)": tot_odvinuto, 
-                            "Čistá plocha dílů (m2)": tot_plocha, 
-                            "Cena materiálu (bez DPH)": tot_cena_mat
+                            "Celkem odvinout (m)": tot_odvinuto
                         }
                         
                         st.session_state.sumar = sumar
@@ -460,7 +458,7 @@ with tab_kalk:
                 md_table = f"""
 | Položka | Hodnota |
 | :--- | ---: |
-| Celková čistá plocha dílů: | **{fmt_cz(tot_plocha)} m²** |
+| Celková plocha (vč. přesahů u dělených kusů): | **{fmt_cz(tot_plocha)} m²** |
 | Materiál - Čistá plocha (bez DPH): | {fmt_cz(c_mat)} Kč |
 | Práce / Ohyby (bez DPH): | {fmt_cz(cena_prace)} Kč |
 | Atypické příplatky (bez DPH): | {fmt_cz(cena_priplatky)} Kč |
@@ -475,7 +473,8 @@ with tab_kalk:
                     # Tabulka 1: Základní info
                     info_df = pd.DataFrame([
                         {"Parametr": "Odběratel / Zakázka", "Hodnota": st.session_state.odberatel},
-                        {"Parametr": "Materiál", "Hodnota": st.session_state.v_mat}
+                        {"Parametr": "Materiál", "Hodnota": st.session_state.v_mat},
+                        {"Parametr": "Nastavený přesah spojů (mm)", "Hodnota": st.session_state.config.get("presah", 40)}
                     ])
                     info_df.to_excel(wr, sheet_name='Zadání', index=False, startrow=0)
                     
@@ -483,61 +482,69 @@ with tab_kalk:
                     df_out = pd.DataFrame(st.session_state.zakazka)
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
                     
-                    # Nové sloupce (Plocha a Cena za ohyby pro každý řádek)
+                    # Výpočet skutečné plochy včetně přesahů pro rozdělené kusy
+                    max_d = float(st.session_state.config.get("max_delka", 4000))
+                    presah = float(st.session_state.config.get("presah", 40))
                     cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
-                    df_out['Plocha (m2)'] = (df_out['RŠ (mm)'] / 1000) * df_out['Metrů'] * df_out['Kusů']
+                    
+                    real_areas = []
+                    for _, row in df_out.iterrows():
+                        L_mm = row['Metrů'] * 1000
+                        # Počet segmentů, na které se musí díl rozdělit
+                        seg = 1 if L_mm <= max_d else math.ceil((L_mm - presah) / (max_d - presah))
+                        # Zvýšení celkové délky o přesahy (pouze pokud seg > 1)
+                        real_L_mm = L_mm + (seg - 1) * presah
+                        plocha = (real_L_mm / 1000) * (row['RŠ (mm)'] / 1000) * row['Kusů']
+                        real_areas.append(plocha)
+                        
+                    df_out['Plocha vč. přesahů (m2)'] = real_areas
                     df_out['Cena za ohyby (Kč)'] = df_out['Ohyby'] * cena_ohyb_val * df_out['Metrů'] * df_out['Kusů']
                     
                     # Řádek "CELKEM" pod tabulkou položek
                     total_row = {col: "" for col in df_out.columns}
                     total_row['Řádek'] = "CELKEM"
-                    total_row['Plocha (m2)'] = df_out['Plocha (m2)'].sum()
+                    total_row['Plocha vč. přesahů (m2)'] = df_out['Plocha vč. přesahů (m2)'].sum()
                     total_row['Cena za ohyby (Kč)'] = df_out['Cena za ohyby (Kč)'].sum()
                     
-                    # Přidání součtového řádku do dataframe
                     df_out = pd.concat([df_out, pd.DataFrame([total_row])], ignore_index=True)
                     
                     # Zápis tabulky položek na list "Zadání"
-                    df_out.to_excel(wr, sheet_name='Zadání', index=False, startrow=4)
-                    
-                    # Výpočet startovní pozice pro finální kalkulaci
-                    kalkulace_startrow = 4 + len(df_out) + 3 
+                    df_out.to_excel(wr, sheet_name='Zadání', index=False, startrow=5)
                     
                     # Finální kalkulace cen
+                    kalkulace_startrow = 5 + len(df_out) + 2 
                     fin_data = [
-                        {"Položka": "Materiál - Čistá plocha (bez DPH)", "Částka (Kč)": c_mat},
-                        {"Položka": "Práce / Ohyby (bez DPH)", "Částka (Kč)": cena_prace},
-                        {"Položka": "Atypické příplatky (bez DPH)", "Částka (Kč)": cena_priplatky},
-                        {"Položka": "CELKEM (bez DPH)", "Částka (Kč)": total_bez},
-                        {"Položka": "CELKEM (s DPH 21 %)", "Částka (Kč)": total_s}
+                        {"Finální kalkulace": "Materiál - Čistá plocha (bez DPH)", "Částka (Kč)": c_mat},
+                        {"Finální kalkulace": "Práce / Ohyby (bez DPH)", "Částka (Kč)": cena_prace},
+                        {"Finální kalkulace": "Atypické příplatky (bez DPH)", "Částka (Kč)": cena_priplatky},
+                        {"Finální kalkulace": "CELKEM (bez DPH)", "Částka (Kč)": total_bez},
+                        {"Finální kalkulace": "CELKEM (s DPH 21 %)", "Částka (Kč)": total_s}
                     ]
-                    
-                    # Zápis finální kalkulace pod položky
                     pd.DataFrame(fin_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=kalkulace_startrow)
 
-                    # Souhrn materiálu na další list
-                    pd.DataFrame.from_dict(st.session_state.sumar, orient='index', columns=['Hodnota']).to_excel(wr, sheet_name='Souhrn_Materiálu')
+                    # Výrobní souhrn (odvinuto, moduly) - ihned pod cenami
+                    prod_startrow = kalkulace_startrow + len(fin_data) + 2
+                    prod_data = [
+                        {"Výrobní parametry": "Počet Modulů (ks)", "Hodnota": st.session_state.sumar["Počet Modulů (ks)"]},
+                        {"Výrobní parametry": "Celkem odvinout (m)", "Hodnota": st.session_state.sumar["Celkem odvinout (m)"]}
+                    ]
+                    pd.DataFrame(prod_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=prod_startrow)
                     
-                    # Aplikace formátování čísel pro Excel (zajistí mezeru u tisíců a 2 desetinná místa)
+                    # Aplikace formátování čísel pro Excel
                     wb = wr.book
-                    for sheet_name in ['Zadání', 'Souhrn_Materiálu']:
-                        ws = wr.sheets[sheet_name]
-                        for col in ws.columns:
-                            max_length = 0
-                            column_letter = col[0].column_letter
-                            for cell in col:
-                                # Pokud je hodnota desetinné číslo (float), Excel ho správně naformátuje
-                                if isinstance(cell.value, float):
-                                    cell.number_format = '#,##0.00'
-                                
-                                try:
-                                    if cell.value:
-                                        max_length = max(max_length, len(str(cell.value)))
-                                except:
-                                    pass
-                            # Šířka sloupce
-                            adjusted_width = (max_length + 2)
-                            ws.column_dimensions[column_letter].width = adjusted_width
+                    ws = wr.sheets['Zadání']
+                    for col in ws.columns:
+                        max_length = 0
+                        column_letter = col[0].column_letter
+                        for cell in col:
+                            if isinstance(cell.value, float):
+                                cell.number_format = '#,##0.00'
+                            try:
+                                if cell.value:
+                                    max_length = max(max_length, len(str(cell.value)))
+                            except:
+                                pass
+                        ws.column_dimensions[column_letter].width = (max_length + 2)
                     
                     # Nákresy
                     if st.session_state.get('generated_figs'):
