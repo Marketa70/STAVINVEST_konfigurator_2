@@ -69,7 +69,7 @@ st.title("✂️ Konfigurátor Stavinvest")
 st.info("💡 **Nová funkce:** Rozvinutou šíři (RŠ) nyní zadáváte ručně v milimetrech pro každý prvek zvlášť.")
 
 # ==========================================
-# MODULOVÝ PRUHOVÝ ALGORITMUS (POUZE PODÉLNÉ ŘEZY)
+# NOVÝ VYLEPŠENÝ ALGORITMUS PRO OPTIMALIZACI PRUHŮ (DOKONČENÝ)
 # ==========================================
 def pack_module_strips(items, coil_w, max_l, allow_rotation=False):
     best_modules = None
@@ -78,10 +78,13 @@ def pack_module_strips(items, coil_w, max_l, allow_rotation=False):
     for iteration in range(200):
         test_items = copy.deepcopy(items)
         
+        # Různé strategie řazení pro nalezení absolutně nejlepšího uspořádání
         if iteration == 0:
             test_items.sort(key=lambda x: x['L'], reverse=True)
         elif iteration == 1:
             test_items.sort(key=lambda x: x['rš'], reverse=True)
+        elif iteration == 2:
+            test_items.sort(key=lambda x: x['L'] * x['rš'], reverse=True)
         else:
             random.shuffle(test_items)
             
@@ -89,7 +92,7 @@ def pack_module_strips(items, coil_w, max_l, allow_rotation=False):
             can_std = (it['L'] <= max_l and it['rš'] <= coil_w)
             can_rot = (allow_rotation and it['rš'] <= max_l and it['L'] <= coil_w)
             
-            if iteration < 2:
+            if iteration < 3:
                 if can_std: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
                 elif can_rot: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
                 else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False 
@@ -100,52 +103,60 @@ def pack_module_strips(items, coil_w, max_l, allow_rotation=False):
                 elif can_rot: it['dx'], it['dy'], it['rotated'] = it['rš'], it['L'], True
                 else: it['dx'], it['dy'], it['rotated'] = it['L'], it['rš'], False
 
-        groups = defaultdict(list)
+        modules = []
+        
         for it in test_items:
-            groups[it['dy']].append(it)
+            placed = False
             
-        strips = []
-        for dy, group_items in groups.items():
-            if iteration % 2 == 0:
-                group_items.sort(key=lambda x: x['dx'], reverse=True)
-            else:
-                random.shuffle(group_items)
-                
-            current_strips = []
-            for it in group_items:
-                placed = False
-                for s in current_strips:
-                    if s['l'] + it['dx'] <= max_l:
+            # Krok 1: Pokus se zařadit díl do existujícího pruhu v modulu TAK, aby se modul neprodloužil!
+            for m in modules:
+                for s in m['strips']:
+                    if s['w'] == it['dy'] and s['l'] + it['dx'] <= m['l']:
                         it['x'] = s['l']
+                        it['y'] = s['y']
                         s['items'].append(it)
                         s['l'] += it['dx']
                         placed = True
                         break
-                if not placed:
-                    it['x'] = 0
-                    current_strips.append({'w': dy, 'l': it['dx'], 'items': [it]})
-            strips.extend(current_strips)
+                if placed: break
+            if placed: continue
             
-        strips.sort(key=lambda s: s['l'], reverse=True)
-        modules = []
-        
-        for s in strips:
-            placed = False
+            # Krok 2: Pokus se založit nový pruh v existujícím modulu (vedle ostatních)
             for m in modules:
-                if m['used_w'] + s['w'] <= coil_w:
-                    s['y'] = m['used_w']
-                    for it in s['items']:
-                        it['y'] = s['y']
-                    m['strips'].append(s)
-                    m['used_w'] += s['w']
-                    m['l'] = max(m['l'], s['l'])
+                if m['used_w'] + it['dy'] <= coil_w:
+                    it['x'] = 0
+                    it['y'] = m['used_w']
+                    new_s = {'w': it['dy'], 'l': it['dx'], 'y': m['used_w'], 'items': [it]}
+                    m['strips'].append(new_s)
+                    m['used_w'] += it['dy']
+                    m['l'] = max(m['l'], it['dx'])
                     placed = True
                     break
-            if not placed:
-                s['y'] = 0
-                for it in s['items']:
-                    it['y'] = 0
-                modules.append({'used_w': s['w'], 'l': s['l'], 'strips': [s]})
+            if placed: continue
+            
+            # Krok 3: Otestování řetězení 
+            if iteration % 2 == 0:
+                for m in modules:
+                    for s in m['strips']:
+                        if s['w'] == it['dy'] and s['l'] + it['dx'] <= max_l:
+                            it['x'] = s['l']
+                            it['y'] = s['y']
+                            s['items'].append(it)
+                            s['l'] += it['dx']
+                            m['l'] = max(m['l'], s['l']) 
+                            placed = True
+                            break
+                    if placed: break
+            if placed: continue
+
+            # Krok 4: Pokud se nevejde nikam, založit nový modul
+            it['x'] = 0
+            it['y'] = 0
+            modules.append({
+                'l': it['dx'], 
+                'used_w': it['dy'], 
+                'strips': [{'w': it['dy'], 'l': it['dx'], 'y': 0, 'items': [it]}]
+            })
                 
         tot_len = sum(m['l'] for m in modules)
         if tot_len < best_len:
@@ -256,18 +267,15 @@ with tab_data:
     if st.session_state.current_user == "admin@stavinvest.cz":
         st.write("Jako administrátor můžete upravovat globální nastavení, ceny a materiály.")
         
-        # Admin si může upravit a uložit cenu za ohyb
         novy_ohyb = st.number_input("Cena za 1 ohyb (Kč)", value=float(st.session_state.config.get("cena_ohyb", 12.0)))
         
         edited_mat = st.data_editor(st.session_state.materialy_df, num_rows="dynamic", key="em", use_container_width=True)
         edited_prv = st.data_editor(st.session_state.prvky_df, num_rows="dynamic", key="ep", use_container_width=True)
         
         if st.button("💾 Uložit všechny změny trvale", type="primary"):
-            # Uložení CSV
             edited_mat.to_csv(FILE_MAT, index=False)
             edited_prv.to_csv(FILE_PRV, index=False)
             
-            # Uložení konfigurace (json)
             st.session_state.config["cena_ohyb"] = novy_ohyb
             with open(FILE_CONF, "w", encoding="utf-8") as f:
                 json.dump(st.session_state.config, f)
@@ -384,7 +392,6 @@ with tab_kalk:
                             st.error(f"CHYBA na řádku {row_id}: Prvek '{p['Prvek']}' s RŠ {rs_mm} mm je moc široký na materiál {v_mat}!")
                             continue
 
-                        # VÝPOČET PRÁCE: (počet ohybů * cena * metry * kusy)
                         cena_prace += (p["Ohyby"] * conf["cena_ohyb"]) * p["Metrů"] * p["Kusů"]
                         cena_priplatky += p.get("Atyp příplatek/ks (Kč)", 0.0) * p["Kusů"]
                         
@@ -458,7 +465,6 @@ with tab_kalk:
                 total_bez = c_mat + cena_prace + cena_priplatky
                 total_s = total_bez * 1.21
 
-                # Zjednodušená tabulka na hlavní stránce (odstraněna plocha dílů a metry odvinu)
                 md_table = f"""
 | Položka | Hodnota |
 | :--- | ---: |
@@ -474,7 +480,6 @@ with tab_kalk:
                 # --- EXCEL EXPORT ---
                 buf = io.BytesIO()
                 with pd.ExcelWriter(buf, engine='openpyxl') as wr:
-                    # Tabulka 1: Základní info
                     info_df = pd.DataFrame([
                         {"Parametr": "Odběratel / Zakázka", "Hodnota": st.session_state.odberatel},
                         {"Parametr": "Materiál", "Hodnota": st.session_state.v_mat},
@@ -482,16 +487,12 @@ with tab_kalk:
                     ])
                     info_df.to_excel(wr, sheet_name='Zadání', index=False, startrow=0)
                     
-                    # Příprava položek s výpočty
                     df_out = pd.DataFrame(st.session_state.zakazka)
                     df_out.insert(0, 'Řádek', range(1, len(df_out) + 1))
                     
                     cena_ohyb_val = float(st.session_state.config.get("cena_ohyb", 12.0))
-                    
-                    # Sloupec pro výpočet práce
                     df_out['Cena za ohyby (Kč)'] = df_out['Ohyby'] * cena_ohyb_val * df_out['Metrů'] * df_out['Kusů']
                     
-                    # Řádek "CELKEM" pod tabulkou položek
                     total_row = {col: "" for col in df_out.columns}
                     total_row['Řádek'] = "CELKEM"
                     total_row['Atyp příplatek/ks (Kč)'] = cena_priplatky
@@ -500,7 +501,6 @@ with tab_kalk:
                     df_out = pd.concat([df_out, pd.DataFrame([total_row])], ignore_index=True)
                     df_out.to_excel(wr, sheet_name='Zadání', index=False, startrow=5)
                     
-                    # Finální kalkulace cen přímo na listu "Zadání"
                     kalkulace_startrow = 5 + len(df_out) + 2 
                     fin_data = [
                         {"Finální kalkulace": "Celkem odvinout z role (m)", "Hodnota / Částka": float(st.session_state.tot_odvinuto)},
@@ -513,14 +513,12 @@ with tab_kalk:
                     ]
                     pd.DataFrame(fin_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=kalkulace_startrow)
 
-                    # Výrobní souhrn (moduly) - hned pod kalkulací
                     prod_startrow = kalkulace_startrow + len(fin_data) + 2
                     prod_data = [
                         {"Výrobní parametry": "Počet Výrobních Modulů (ks)", "Hodnota": st.session_state.sumar["Počet Modulů (ks)"]}
                     ]
                     pd.DataFrame(prod_data).to_excel(wr, sheet_name='Zadání', index=False, startrow=prod_startrow)
                     
-                    # Aplikace formátování čísel pro Excel
                     wb = wr.book
                     ws = wr.sheets['Zadání']
                     for col in ws.columns:
@@ -536,7 +534,6 @@ with tab_kalk:
                                 pass
                         ws.column_dimensions[column_letter].width = (max_length + 2)
                     
-                    # Nákresy
                     if st.session_state.get('generated_figs'):
                         ws_img = wb.create_sheet('Výrobní nákresy')
                         ws_img.column_dimensions['A'].width = 50 
